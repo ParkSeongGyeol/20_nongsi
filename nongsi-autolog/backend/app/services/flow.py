@@ -23,4 +23,3 @@ def interpolate_flow_lpm(
                 upper["flow_lpm"] - lower["flow_lpm"]
             )
     raise RuntimeError("pressure interpolation interval not found")
-

@@ -36,7 +36,6 @@ def start_session(request: SessionRequest) -> dict[str, object]:
     except SessionError as exc:
         raise _http_error(exc) from exc
 
-
 @router.get("/sessions/{session_id}")
 def get_session(session_id: str) -> dict[str, object]:
     try:
@@ -109,4 +108,3 @@ def confirm_event(
         return work_session_service.confirm(event_id, request)
     except SessionError as exc:
         raise _http_error(exc) from exc
-

@@ -49,7 +49,6 @@ def assess_risk(
             "text": f"압력 저하 추정 구간은 {pressure_fault_seconds:.1f}초입니다.",
         }
     )
-
     return (
         {
             "rain_exposure": rain_level,
@@ -58,4 +57,3 @@ def assess_risk(
         },
         explanations,
     )
-

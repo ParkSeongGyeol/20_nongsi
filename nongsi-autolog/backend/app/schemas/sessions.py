@@ -44,4 +44,3 @@ class ConfirmationRequest(BaseModel):
     confirmed: bool
     note: Annotated[str, Field(max_length=1000)] | None = None
     corrections: dict[str, Any] | None = None
-

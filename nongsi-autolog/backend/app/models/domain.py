@@ -175,4 +175,3 @@ class UserConfirmation(TraceableMixin, Base):
     confirmed: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     correction_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-
