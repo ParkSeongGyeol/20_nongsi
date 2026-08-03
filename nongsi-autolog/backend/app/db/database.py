@@ -25,7 +25,7 @@ def _ensure_sqlite_directory(database_url: str) -> None:
 
 _ensure_sqlite_directory(settings.database_url)
 connect_args = (
-    {"check_same_thread": False}
+    {"check_same_thread": False, "timeout": 30}
     if settings.database_url.startswith("sqlite")
     else {}
 )
@@ -35,7 +35,7 @@ session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_db(target_engine: Engine = engine) -> None:
     # Import models before create_all so their table metadata is registered.
+    from app.models.device_state import DeviceStateReading  # noqa: F401
     from app.models.sensor_reading import SensorReading  # noqa: F401
 
     Base.metadata.create_all(bind=target_engine)
-

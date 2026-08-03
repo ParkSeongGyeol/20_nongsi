@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "default": {
+    "window_size": 3,
+    "minimum_state_duration_seconds": 1.0,
+    "pump_current_on_a": 1.0,
+    "pump_current_off_a": 0.6,
+    "vibration_moving_on_rms": 0.35,
+    "vibration_moving_off_rms": 0.25,
+    "pressure_spray_min_bar": 5.0,
+    "pressure_fault_recovery_bar": 5.5
+  },
+  "devices": {
+    "sprayer-001": {
+      "window_size": 3,
+      "minimum_state_duration_seconds": 1.0
+    }
+  }
+}

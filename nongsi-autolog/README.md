@@ -1,6 +1,6 @@
 # 농시 AutoLog
 
-현재 구현 범위는 Phase 1의 첫 체크포인트입니다. Python 시뮬레이터가 실제 ESP32와 동일한 JSON 구조로 MQTT telemetry를 발행하고, FastAPI 백엔드가 payload를 검증한 뒤 콘솔과 SQLite `sensor_readings` 테이블에 저장합니다. React, 작업 상태 판정, GNSS, 기상 결합, ESP32 펌웨어는 아직 구현하지 않았습니다.
+현재 구현 범위는 Phase 1의 두 번째 체크포인트입니다. Python 시뮬레이터가 실제 ESP32와 동일한 JSON 구조로 MQTT telemetry를 발행하고, FastAPI 백엔드가 원본을 SQLite에 저장한 뒤 규칙 기반으로 `IDLE`, `MOVING`, `SPRAYING`, `PRESSURE_FAULT`, `SENSOR_FAULT` 상태를 판정합니다. React 대시보드는 SSE로 센서값과 판정 상태를 실시간 표시합니다. 작업 세션, GNSS 지도, 기상 결합, 결과 내보내기와 ESP32 펌웨어는 아직 구현하지 않았습니다.
 
 ## Phase 0 — Windows 개발환경 확인
 
@@ -51,7 +51,13 @@ Set-Location .\nongsi-autolog
 docker compose up --build
 ```
 
-기본값은 `.env` 없이도 동작합니다. 값을 바꾸려면 먼저 `Copy-Item .env.example .env`를 한 번 실행합니다. Compose는 Mosquitto, FastAPI, 시뮬레이터를 순서대로 시작합니다. 시뮬레이터는 1초마다 telemetry를 전송합니다. 개발용 Mosquitto 설정은 익명 접속을 허용하므로 외부 네트워크에 그대로 배포하지 마십시오.
+기본값은 `.env` 없이도 동작합니다. 값을 바꾸려면 먼저 `Copy-Item .env.example .env`를 한 번 실행합니다. Compose는 Mosquitto, FastAPI, React/Nginx, 시뮬레이터를 시작합니다. 시뮬레이터는 1초마다 telemetry를 전송합니다. 개발용 Mosquitto 설정은 익명 접속을 허용하므로 외부 네트워크에 그대로 배포하지 마십시오.
+
+실행 후 접속 주소는 다음과 같습니다.
+
+- 실시간 대시보드: `http://localhost:5173`
+- FastAPI 문서: `http://localhost:8000/docs`
+- readiness: `http://localhost:8000/health`
 
 ## 저장 결과 검증
 
@@ -60,11 +66,12 @@ docker compose up --build
 ```powershell
 Invoke-RestMethod http://localhost:8000/health | ConvertTo-Json
 Invoke-RestMethod 'http://localhost:8000/api/readings?limit=3' | ConvertTo-Json -Depth 5
+Invoke-RestMethod 'http://localhost:8000/api/devices/sprayer-001/snapshot' | ConvertTo-Json -Depth 6
 docker compose logs --tail 30 backend
 docker compose logs --tail 10 simulator
 ```
 
-정상이라면 `/health`의 HTTP 상태가 200이고 `status`가 `ok`, `mqtt_connected`가 `true`이며 `/api/readings`의 `total`이 계속 증가합니다. DB 또는 MQTT가 준비되지 않으면 `/health`는 의도적으로 HTTP 503과 `degraded`를 반환합니다. SQLite 파일은 `data/nongsi.db`에 생성됩니다. 종료 명령은 다음과 같습니다.
+정상이라면 `/health`의 HTTP 상태가 200이고 `status`가 `ok`, `mqtt_connected`가 `true`이며 `/api/readings`의 `total`이 계속 증가합니다. snapshot API의 `state`는 약 25초 주기로 `IDLE`, `MOVING`, `SPRAYING`, `PRESSURE_FAULT`를 순환합니다. DB 또는 MQTT가 준비되지 않으면 `/health`는 의도적으로 HTTP 503과 `degraded`를 반환합니다. SQLite 파일은 `data/nongsi.db`에 생성됩니다. 종료 명령은 다음과 같습니다.
 
 ```powershell
 docker compose down
@@ -106,5 +113,28 @@ $env:DATABASE_URL = 'sqlite:///../data/nongsi.db'
 - timestamp: timezone이 포함된 ISO 8601만 허용
 - topic의 `device_id`와 payload의 `device_id`가 다르면 거부
 - IMU, pump, pressure 결측은 저장하되 `quality_flag`에 기록
+
+## 규칙 기반 상태 판정
+
+임계값은 코드가 아닌 `backend/config/device_thresholds.json`에서 관리합니다. 파일의 `default` 설정 위에 `devices.{device_id}` 값을 병합하므로 장치별 보정값을 적용할 수 있습니다. 파일 수정은 다음 telemetry부터 자동 반영됩니다.
+
+- 이동평균 window
+- 최소 상태 지속시간
+- 펌프 전류 on/off 히스테리시스
+- 진동 이동 on/off 히스테리시스
+- 정상 분사 최소 압력
+- 압력 이상 복구 기준
+
+판정 결과는 원본 `sensor_readings`와 분리된 `device_states` 테이블에 저장됩니다. 화면의 신뢰도는 학습 모델 정확도가 아니라 센서 완전성과 규칙 일치도를 조합한 MVP용 설명 지표입니다.
+
+## 프론트엔드 로컬 개발
+
+백엔드가 `localhost:8000`에서 실행 중일 때 다음 명령을 사용합니다.
+
+```powershell
+Set-Location .\frontend
+npm install
+npm run dev
+```
 
 API 문서는 실행 후 `http://localhost:8000/docs`에서 확인할 수 있습니다.

@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.routes import router
 from app.core.config import settings
 from app.db.database import init_db, session_factory
 from app.services.mqtt.subscriber import MQTTSubscriber
+from app.services.event_detection import DeviceConfigRepository, StateDetectionService
 from app.services.telemetry import TelemetryIngestor
 
 logging.basicConfig(
@@ -19,7 +21,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ingestor = TelemetryIngestor(session_factory)
+device_configs = DeviceConfigRepository(settings.device_config_path)
+state_detector = StateDetectionService(session_factory, device_configs)
+ingestor = TelemetryIngestor(session_factory, state_detector)
 mqtt_subscriber = MQTTSubscriber(settings, ingestor)
 
 
@@ -36,7 +40,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("%s stopped", settings.app_name)
 
 
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.cors_origins),
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 app.include_router(router)
 
 
