@@ -1,110 +1,80 @@
 # 농시 AutoLog
 
-현재 구현 범위는 Phase 1의 첫 체크포인트입니다. Python 시뮬레이터가 실제 ESP32와 동일한 JSON 구조로 MQTT telemetry를 발행하고, FastAPI 백엔드가 payload를 검증한 뒤 콘솔과 SQLite `sensor_readings` 테이블에 저장합니다. React, 작업 상태 판정, GNSS, 기상 결합, ESP32 펌웨어는 아직 구현하지 않았습니다.
+노지감귤 방제기의 센서 상태, 스마트폰 GNSS 경로, 기상 위험을 하나의 추적 가능한 작업 이벤트로 만드는 발표용 MVP입니다. 현재 Phase 1 센서 없는 End-to-End 데모가 완성되어 있으며 실제 농약이 아닌 저전압 물 펌프 시연을 전제로 합니다. 상태 판정과 신뢰도는 학습 AI가 아닌 설명 가능한 규칙 기반 기준모델입니다.
 
-## Phase 0 — Windows 개발환경 확인
+## 1분 실행
 
-PowerShell에서 다음 명령으로 설치 여부와 버전을 확인합니다.
-
-```powershell
-Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture
-docker --version
-docker compose version
-docker info
-python --version
-py -0p
-node --version
-npm --version
-git --version
-code --version
-pio --version
-```
-
-필수: Docker Desktop(Compose v2 포함), Python 3.11 이상, Git. Node.js와 PlatformIO는 이후 프론트엔드/ESP32 단계에서 사용합니다. `docker info`가 오류를 내면 Docker Desktop을 시작한 뒤 다시 확인합니다.
-
-## 저장소 디렉터리 생성 명령
-
-이 저장소는 이미 생성되어 있습니다. 같은 구조를 수동으로 다시 만들 때의 PowerShell 명령은 다음과 같습니다.
-
-```powershell
-$project = Join-Path (Get-Location) 'nongsi-autolog'
-$directories = @(
-  'firmware/esp32-sprayer/src',
-  'backend/app/api', 'backend/app/core', 'backend/app/db',
-  'backend/app/models', 'backend/app/schemas',
-  'backend/app/services/mqtt', 'backend/app/services/event_detection',
-  'backend/app/services/weather', 'backend/app/services/risk', 'backend/tests',
-  'frontend/src', 'simulator/scenarios', 'mosquitto/config',
-  'data/samples', 'docs'
-)
-$directories | ForEach-Object {
-  New-Item -ItemType Directory -Force -Path (Join-Path $project $_) | Out-Null
-}
-```
-
-## 한 명령으로 실행
-
-Docker Desktop이 실행 중인 상태에서 저장소 루트에서 실행합니다.
+요구사항은 Windows 11, Docker Desktop(Compose v2), Git입니다. Docker Desktop을 실행한 뒤 저장소 루트에서 다음 한 명령을 실행합니다.
 
 ```powershell
 Set-Location .\nongsi-autolog
 docker compose up --build
 ```
 
-기본값은 `.env` 없이도 동작합니다. 값을 바꾸려면 먼저 `Copy-Item .env.example .env`를 한 번 실행합니다. Compose는 Mosquitto, FastAPI, 시뮬레이터를 순서대로 시작합니다. 시뮬레이터는 1초마다 telemetry를 전송합니다. 개발용 Mosquitto 설정은 익명 접속을 허용하므로 외부 네트워크에 그대로 배포하지 마십시오.
+서비스가 준비되면 다음 주소를 엽니다.
 
-## 저장 결과 검증
+- PWA/대시보드: http://localhost:5173
+- FastAPI 문서: http://localhost:8000/docs
+- 상태 확인: http://localhost:8000/health
 
-별도 PowerShell 창에서 실행합니다.
+화면에서 `새 작업 시작` → `데모 경로` → `기록 시작`을 누릅니다. 시뮬레이터가 약 25초 동안 `IDLE → MOVING → SPRAYING → PRESSURE_FAULT`를 순환하며 지도 경로가 2초마다 추가됩니다. `작업 종료`를 누르면 작업 이벤트와 모의 강우 95분 위험, JSON/CSV 다운로드가 생성됩니다.
+
+브라우저 없이 같은 흐름을 실행할 수도 있습니다.
+
+```powershell
+python .\simulator\route_simulator.py --interval 2 --points 15
+```
+
+## 검증
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/health | ConvertTo-Json
-Invoke-RestMethod 'http://localhost:8000/api/readings?limit=3' | ConvertTo-Json -Depth 5
-docker compose logs --tail 30 backend
-docker compose logs --tail 10 simulator
+Invoke-RestMethod 'http://localhost:8000/api/devices/sprayer-001/snapshot' | ConvertTo-Json -Depth 6
+docker compose ps
+docker compose logs --tail 30 backend simulator
 ```
 
-정상이라면 `/health`의 HTTP 상태가 200이고 `status`가 `ok`, `mqtt_connected`가 `true`이며 `/api/readings`의 `total`이 계속 증가합니다. DB 또는 MQTT가 준비되지 않으면 `/health`는 의도적으로 HTTP 503과 `degraded`를 반환합니다. SQLite 파일은 `data/nongsi.db`에 생성됩니다. 종료 명령은 다음과 같습니다.
+백엔드 단위·서비스 테스트와 프론트 프로덕션 빌드는 다음과 같습니다.
 
 ```powershell
-docker compose down
-```
-
-`docker compose down -v`는 broker 볼륨까지 삭제하므로 데이터 초기화가 명시적으로 필요할 때만 사용합니다.
-
-## Docker 없이 백엔드 테스트
-
-MQTT broker 연결까지 확인하려면 Docker가 필요합니다. payload 검증과 SQLite 저장 로직은 로컬에서 독립적으로 테스트할 수 있습니다.
-
-```powershell
-Set-Location .\nongsi-autolog\backend
+Set-Location .\backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
+
+Set-Location ..\frontend
+npm install
+npm run build
 ```
 
-broker만 Docker로 실행하고 백엔드·시뮬레이터를 로컬 Python으로 실행하려면 각각 별도 PowerShell 창에서 다음을 사용합니다.
+현재 테스트는 MQTT payload/중복 sequence/잘못된 timestamp/센서 결측/상태 전환/최소 유지시간/압력 이상/유량 보간/기상 캐시 복구/이벤트/CSV/위치 없음/KMA 격자 변환을 다룹니다.
+
+## 기상 공급자
+
+기본값은 키 없이도 재현 가능한 `MockWeatherProvider`입니다. 기상청 API허브 키가 있으면 `.env.example`을 `.env`로 복사하고 `KMA_AUTH_KEY`를 설정합니다.
 
 ```powershell
-# 창 1: 저장소 루트
-docker compose up mosquitto
-
-# 창 2: backend
-$env:MQTT_HOST = 'localhost'
-$env:DATABASE_URL = 'sqlite:///../data/nongsi.db'
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-
-# 창 3: 저장소 루트
-.\backend\.venv\Scripts\python.exe .\simulator\sensor_simulator.py --count 10
+Copy-Item .env.example .env
+# .env의 KMA_AUTH_KEY=... 입력
+docker compose up -d --build backend frontend
 ```
 
-## 현재 MQTT 계약
+키가 있으면 `KmaWeatherProvider`, 없으면 Mock이 선택됩니다. 두 공급자 모두 30분 캐시로 감싸며 공급자 장애 시 마지막 캐시를 사용합니다. 공식 API 사양과 현재 한계는 [docs/architecture.md](docs/architecture.md)에 기록했습니다.
 
-- 구독 토픽: `nongsi/devices/{device_id}/telemetry`
-- QoS: 1
-- 중복 기준: `(device_id, sequence)`
-- timestamp: timezone이 포함된 ISO 8601만 허용
-- topic의 `device_id`와 payload의 `device_id`가 다르면 거부
-- IMU, pump, pressure 결측은 저장하되 `quality_flag`에 기록
+## 데이터와 안전
 
-API 문서는 실행 후 `http://localhost:8000/docs`에서 확인할 수 있습니다.
+- SQLite 원본/결과: `data/nongsi.db`
+- 상태 임계값: `backend/config/device_thresholds.json`
+- 물 보정표: 시작 시 DB의 `device_calibrations`에 데모 값으로 시드
+- 추정 살포량은 `압력별 선형보간 유량 × 분사시간`이며 정밀 계량값이 아닙니다.
+- 실제 농약, 고전류 방제기, 실제 배관에는 연결하지 않습니다. 하드웨어 사양 확인 전 회로 연결을 진행하지 마십시오.
+- `.env`, DB, 빌드 결과는 Git에 포함되지 않습니다.
+
+## 문서
+
+- [아키텍처와 데이터 흐름](docs/architecture.md)
+- [REST/MQTT API](docs/api.md)
+- [발표 시연 순서](docs/demo-script.md)
+- [하드웨어 안전 및 Phase 2](docs/hardware.md)
+
+종료는 `docker compose down`입니다. 데이터 초기화가 명시적으로 필요할 때만 `docker compose down -v`를 사용하십시오.

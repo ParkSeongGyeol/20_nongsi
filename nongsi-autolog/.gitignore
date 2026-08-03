@@ -3,6 +3,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp/
 .coverage
 htmlcov/
 data/*.db
@@ -12,5 +13,6 @@ data/*.db-wal
 .idea/
 node_modules/
 dist/
+*.tsbuildinfo
 .pio/
-
+firmware/esp32-sprayer/include/nongsi_config.h

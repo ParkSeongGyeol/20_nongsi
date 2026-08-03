@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.sensor_reading import SensorReading
 from app.schemas.telemetry import TelemetryPayload
+from app.services.event_detection.detector import StateDetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,13 @@ class IngestResult:
 
 
 class TelemetryIngestor:
-    def __init__(self, sessions: sessionmaker[Session]) -> None:
+    def __init__(
+        self,
+        sessions: sessionmaker[Session],
+        state_detector: StateDetectionService | None = None,
+    ) -> None:
         self._sessions = sessions
+        self._state_detector = state_detector
 
     def ingest_json(
         self,
@@ -96,5 +102,12 @@ class TelemetryIngestor:
             reading.pressure_bar,
             reading.quality_flag,
         )
+        if self._state_detector is not None:
+            try:
+                self._state_detector.process(payload, reading.id)
+            except Exception:
+                logger.exception(
+                    "Telemetry stored but state detection failed: reading=%s",
+                    reading.id,
+                )
         return IngestResult(IngestStatus.STORED, "stored", reading.id)
-
