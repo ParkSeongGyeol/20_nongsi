@@ -15,3 +15,4 @@ node_modules/
 dist/
 *.tsbuildinfo
 .pio/
+firmware/esp32-sprayer/include/nongsi_config.h

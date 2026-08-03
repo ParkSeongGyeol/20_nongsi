@@ -88,6 +88,21 @@ def main() -> None:
     client.connect(args.host, args.port, keepalive=60)
     client.loop_start()
     topic = f"nongsi/devices/{args.device_id}/telemetry"
+    status_topic = f"nongsi/devices/{args.device_id}/status"
+    client.publish(
+        status_topic,
+        json.dumps(
+            {
+                "device_id": args.device_id,
+                "status": "online",
+                "timestamp": datetime.now(KST).isoformat(timespec="seconds"),
+                "source": "python_simulator",
+            },
+            separators=(",", ":"),
+        ),
+        qos=1,
+        retain=True,
+    ).wait_for_publish(timeout=5)
     start_sequence = int(time.time() * 1000)
 
     try:
@@ -111,6 +126,20 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Simulator stopped by user")
     finally:
+        client.publish(
+            status_topic,
+            json.dumps(
+                {
+                    "device_id": args.device_id,
+                    "status": "offline",
+                    "timestamp": datetime.now(KST).isoformat(timespec="seconds"),
+                    "source": "python_simulator",
+                },
+                separators=(",", ":"),
+            ),
+            qos=1,
+            retain=True,
+        ).wait_for_publish(timeout=5)
         client.disconnect()
         client.loop_stop()
 

@@ -35,7 +35,6 @@ session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_db(target_engine: Engine = engine) -> None:
     # Import models before create_all so their table metadata is registered.
-    from app.models.device_state import DeviceStateReading  # noqa: F401
-    from app.models.sensor_reading import SensorReading  # noqa: F401
+    from app import models  # noqa: F401
 
     Base.metadata.create_all(bind=target_engine)

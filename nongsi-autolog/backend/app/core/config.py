@@ -28,6 +28,8 @@ class Settings:
     device_online_timeout_seconds: int
     state_stream_poll_seconds: float
     cors_origins: tuple[str, ...]
+    kma_auth_key: str | None
+    kma_api_base_url: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -59,6 +61,11 @@ class Settings:
                     "http://localhost:5173,http://127.0.0.1:5173",
                 ).split(",")
                 if origin.strip()
+            ),
+            kma_auth_key=os.getenv("KMA_AUTH_KEY") or None,
+            kma_api_base_url=os.getenv(
+                "KMA_API_BASE_URL",
+                "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0",
             ),
         )
 

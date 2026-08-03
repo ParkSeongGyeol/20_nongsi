@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+from typing import Any
 
 import paho.mqtt.client as mqtt
 
@@ -46,6 +48,17 @@ class MQTTSubscriber:
         self._client.disconnect()
         self._client.loop_stop()
         self._connected = False
+
+    def publish_json(self, topic: str, payload: dict[str, Any]) -> None:
+        if not self._connected:
+            raise RuntimeError("MQTT publisher is not connected")
+        result = self._client.publish(
+            topic,
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            qos=1,
+        )
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            raise RuntimeError(f"MQTT publish failed with code {result.rc}")
 
     def _on_connect(
         self,
@@ -98,4 +111,3 @@ class MQTTSubscriber:
             topic_device_id=topic_device_id,
         )
         logger.debug("MQTT ingestion result: %s", result)
-

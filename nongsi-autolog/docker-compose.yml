@@ -34,6 +34,8 @@ services:
       DEVICE_ONLINE_TIMEOUT_SECONDS: ${DEVICE_ONLINE_TIMEOUT_SECONDS:-10}
       STATE_STREAM_POLL_SECONDS: ${STATE_STREAM_POLL_SECONDS:-0.5}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      KMA_AUTH_KEY: ${KMA_AUTH_KEY:-}
+      KMA_API_BASE_URL: ${KMA_API_BASE_URL:-https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0}
     ports:
       - "8000:8000"
     volumes:
